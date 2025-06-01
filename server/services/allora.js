@@ -1,56 +1,43 @@
-import { AlloraClient } from '@allora/sdk';
+import { AlloraAPIClient, ChainSlug, PriceInferenceToken, PriceInferenceTimeframe } from '@alloralabs/allora-sdk/v2';
 import logger from '../config/logger.js';
 
-const client = new AlloraClient({
+const client = new AlloraAPIClient({
   apiKey: process.env.ALLORA_API_KEY,
-  network: process.env.NODE_ENV === 'production' ? 'mainnet' : 'testnet'
+  chainSlug: process.env.NODE_ENV === 'production' ? ChainSlug.MAINNET : ChainSlug.TESTNET,
 });
 
-export async function analyzeContractWithAI(code) {
+export async function getAlloraTopics() {
   try {
-    const analysis = await client.analyzeContract({
-      code,
-      language: 'Move'
-    });
-
-    return {
-      vulnerabilities: analysis.vulnerabilities,
-      riskScore: analysis.riskScore,
-      summary: analysis.summary,
-      recommendations: analysis.recommendations
-    };
+    const topics = await client.getAllTopics();
+    return topics;
   } catch (error) {
-    logger.error('Allora analysis error:', error);
-    throw new Error('Failed to analyze contract with Allora AI');
+    logger.error('Failed to fetch Allora topics:', error);
+    throw new Error('Failed to fetch Allora topics');
   }
 }
 
-export async function monitorContractActivity(contractAddress) {
+export async function getInferenceByTopicID(topicID) {
   try {
-    const monitor = await client.monitorTransactions({
-      contractAddress,
-      eventTypes: ['Transfer', 'Approval', 'Mint', 'Burn']
-    });
-
-    return monitor;
+    const inference = await client.getInferenceByTopicID(topicID);
+    return inference;
   } catch (error) {
-    logger.error('Allora monitoring error:', error);
-    throw new Error('Failed to set up contract monitoring');
+    logger.error(`Failed to fetch inference for topic ${topicID}:`, error);
+    throw new Error('Failed to fetch topic inference');
   }
 }
 
-export async function predictContractBehavior(code) {
+export async function getPriceInference(token = PriceInferenceToken.BTC, timeframe = PriceInferenceTimeframe.EIGHT_HOURS) {
   try {
-    const prediction = await client.queryInference('contract-behavior');
-    return prediction;
+    const price = await client.getPriceInference(token, timeframe);
+    return price;
   } catch (error) {
-    logger.error('Allora prediction error:', error);
-    throw new Error('Failed to predict contract behavior');
+    logger.error('Failed to fetch price inference:', error);
+    throw new Error('Failed to fetch price inference');
   }
 }
 
 export default {
-  analyzeContractWithAI,
-  monitorContractActivity,
-  predictContractBehavior
+  getAlloraTopics,
+  getInferenceByTopicID,
+  getPriceInference,
 };
