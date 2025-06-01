@@ -11,6 +11,7 @@
     "server": "node server/index.js"
   },
   "dependencies": {
+    "@allora/sdk": "^1.0.0",
     "@aptos-labs/ts-sdk": "^1.5.1",
     "aptos": "^1.20.0",
     "axios": "^1.6.2",

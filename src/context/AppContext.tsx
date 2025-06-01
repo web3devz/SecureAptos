@@ -90,7 +90,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...transaction,
       id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     };
-    setTransactions([...transactions, newTransaction]);
+    setTransactions([newTransaction, ...transactions]);
   };
 
   const addReport = (report: Omit<Report, 'id'>) => {

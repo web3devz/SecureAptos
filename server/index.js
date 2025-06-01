@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import logger from './config/logger.js';
 import openai from './services/openai.js';
 import aptos from './services/aptos.js';
+import allora from './services/allora.js';
 
 dotenv.config();
 
@@ -73,7 +74,7 @@ app.post('/api/deploy', async (req, res) => {
   }
 });
 
-// Analyze contract endpoint
+// Analyze contract endpoint with Allora AI
 app.post('/api/analyze', async (req, res) => {
   try {
     const { code } = req.body;
@@ -82,18 +83,53 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Contract code is required' });
     }
     
-    // Perform AI analysis
-    const analysis = await openai.analyzeContract(code);
+    // Perform AI analysis using both OpenAI and Allora
+    const [openaiAnalysis, alloraAnalysis] = await Promise.all([
+      openai.analyzeContract(code),
+      allora.analyzeContractWithAI(code)
+    ]);
+    
+    // Combine and enhance analysis results
+    const combinedAnalysis = {
+      vulnerabilities: [...openaiAnalysis.vulnerabilities, ...alloraAnalysis.vulnerabilities],
+      riskScore: Math.max(openaiAnalysis.riskScore, alloraAnalysis.riskScore),
+      summary: `${openaiAnalysis.summary}\n\nAllora AI Analysis:\n${alloraAnalysis.summary}`,
+      recommendations: alloraAnalysis.recommendations
+    };
     
     res.json({
       success: true,
-      ...analysis
+      ...combinedAnalysis
     });
   } catch (error) {
     logger.error('Analysis error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to analyze contract'
+    });
+  }
+});
+
+// Predict contract behavior endpoint
+app.post('/api/predict', async (req, res) => {
+  try {
+    const { code } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Contract code is required' });
+    }
+    
+    const prediction = await allora.predictContractBehavior(code);
+    
+    res.json({
+      success: true,
+      prediction
+    });
+  } catch (error) {
+    logger.error('Prediction error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to predict contract behavior'
     });
   }
 });
@@ -116,14 +152,32 @@ io.on('connection', (socket) => {
       cleanupMonitoring();
     }
     
-    // Start monitoring transactions
-    cleanupMonitoring = await aptos.monitorTransactions(
-      contractAddress,
-      (transaction) => {
-        socket.emit('transaction', transaction);
-      },
-      network
-    );
+    try {
+      // Set up both Aptos and Allora monitoring
+      const [aptosCleanup, alloraMonitor] = await Promise.all([
+        aptos.monitorTransactions(
+          contractAddress,
+          (transaction) => {
+            socket.emit('transaction', transaction);
+          },
+          network
+        ),
+        allora.monitorContractActivity(contractAddress)
+      ]);
+      
+      // Handle Allora events
+      alloraMonitor.on('event', (event) => {
+        socket.emit('alloraEvent', event);
+      });
+      
+      cleanupMonitoring = () => {
+        aptosCleanup();
+        alloraMonitor.stop();
+      };
+    } catch (error) {
+      logger.error('Monitoring setup error:', error);
+      socket.emit('error', { message: 'Failed to set up monitoring' });
+    }
   });
   
   socket.on('disconnect', () => {
